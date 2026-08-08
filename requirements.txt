@@ -1,0 +1,7 @@
+certifi
+numpy
+pandas
+matplotlib
+flet
+
+
