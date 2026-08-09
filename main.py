@@ -5,7 +5,7 @@ import numpy as np
 import flet as ft
 from PIL import Image, ImageDraw, ImageFont
 
-# 標稱電壓列表
+# 標稱電壓列表[cite: 2]
 VOLTAGE_OPTIONS = [
     ("161", 161000.0),
     ("22.8", 22800.0),
@@ -18,25 +18,25 @@ VOLTAGE_OPTIONS = [
     ("0.22", 220.0),
 ]
 
-# Schneider P3 曲線家族與型態對應字典
+# Schneider P3 曲線家族與型態對應字典[cite: 2]
 CURVE_FAMILY_MAP = {
     "IEC": ["NI", "VI", "EI", "LTI"],
     "IEEE": ["MI", "VI", "EI", "LTI", "LTVI", "LTEI", "STI", "STEI"],
     "IEEE2": ["MI", "NI", "VI", "EI"]
 }
 
-# 繪圖尺寸與邊界參數 (對齊原 Matplotlib 圖表比例)
-FIG_W_PX, FIG_H_PX = 580, 370
+# 繪圖尺寸與邊界參數 (對齊原 Matplotlib 圖表比例)[cite: 2]
+FIG_W_PX, FIG_H_PX = 500, 320
 LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95
 TOP_MARGIN, BOTTOM_MARGIN = 0.88, 0.14
 
 # -----------------------------------------------------------------------------
-# 跳脫時間計算邏輯 (50/51)
+# 跳脫時間計算邏輯 (50/51)[cite: 2]
 # -----------------------------------------------------------------------------
 def calc_trip_time(standard, curve_type, I_base, Ip_base, TMS_TD, enable_51, enable_50, inst_ip_base, inst_time):
     t = np.full_like(I_base, np.nan, dtype=float)
 
-    # 1. 51 反時保護
+    # 1. 51 反時保護[cite: 2]
     if enable_51 and Ip_base > 0:
         M = I_base / Ip_base
         valid_51 = M >= 1.001
@@ -85,7 +85,7 @@ def calc_trip_time(standard, curve_type, I_base, Ip_base, TMS_TD, enable_51, ena
                 idx_51 = np.where(valid_51)[0]
                 t[idx_51[valid_m]] = t_calc
 
-    # 2. 50 瞬跳保護
+    # 2. 50 瞬跳保護[cite: 2]
     if enable_50 and inst_ip_base > 0:
         inst_mask = I_base >= inst_ip_base
         if enable_51:
@@ -97,7 +97,7 @@ def calc_trip_time(standard, curve_type, I_base, Ip_base, TMS_TD, enable_51, ena
     return t
 
 # -----------------------------------------------------------------------------
-# 純 PIL 高效對數圖表繪製引擎 (替代 Matplotlib)
+# 純 PIL 高效對數圖表繪製引擎[cite: 2]
 # -----------------------------------------------------------------------------
 def render_trip_curve_pil(stage_configs, default_colors):
     img = Image.new("RGB", (FIG_W_PX, FIG_H_PX), "white")
@@ -122,10 +122,10 @@ def render_trip_curve_pil(stage_configs, default_colors):
         py = plot_y1 - (ly - log_y_min) / (log_y_max - log_y_min) * (plot_y1 - plot_y0)
         return px, py
 
-    # 畫背景外框
+    # 畫背景外框[cite: 2]
     draw.rectangle([plot_x0, plot_y0, plot_x1, plot_y1], outline="#333333", width=1)
 
-    # 畫 X 軸對數網格
+    # 畫 X 軸對數網格[cite: 2]
     for dec in range(1, 6):
         base_val = 10**dec
         for sub in range(1, 10):
@@ -138,14 +138,14 @@ def render_trip_curve_pil(stage_configs, default_colors):
                 label = f"{int(v)}" if v < 1000 else f"{int(v//1000)}k"
                 draw.text((px - 8, plot_y1 + 4), label, fill="#333333", font=font)
 
-    # 畫 Y 軸對數網格
+    # 畫 Y 軸對數網格[cite: 2]
     y_ticks = [0.001, 0.01, 0.1, 1, 10, 100]
     for y_val in y_ticks:
         _, py = val_to_px(x_min, y_val)
         draw.line([(plot_x0, py), (plot_x1, py)], fill="#B0BEC5", width=1)
         draw.text((plot_x0 - 32, py - 6), f"{y_val:g}", fill="#333333", font=font)
 
-    # 繪製各迴路 Trip Curve
+    # 繪製各迴路 Trip Curve[cite: 2]
     active_voltages = [cfg["voltage"] for cfg in stage_configs if cfg["enable_51"] or cfg["enable_50"]]
     v_base = max(active_voltages) if active_voltages else 161000.0
     v_base_kv = f"{v_base/1000:.2f}kV" if v_base >= 1000 else f"{int(v_base)}V"
@@ -183,7 +183,7 @@ def render_trip_curve_pil(stage_configs, default_colors):
                     I_curve = np.insert(I_curve, idx, inst_ip_base)
                     t_curve = np.insert(t_curve, idx, t_51_at_inst)
 
-        # 將座標轉為點陣繪圖點
+        # 將座標轉為點陣繪圖點[cite: 2]
         pts = []
         for ix, tx in zip(I_curve, t_curve):
             if not np.isnan(tx) and y_min <= tx <= y_max:
@@ -195,11 +195,11 @@ def render_trip_curve_pil(stage_configs, default_colors):
         v_str = f"{config['voltage']/1000:.1f}kV" if config['voltage'] >= 1000 else f"{int(config['voltage'])}V"
         legend_items.append((f"{config['name']} ({v_str})", default_colors[i]))
 
-    # 標題與標籤文字
-    draw.text((plot_x0 + 110, 8), "Time-Current Characteristic", fill="#111111", font=font)
-    draw.text((plot_x0 + 80, plot_y1 + 22), f"Current (A) [Reflected to {v_base_kv}]", fill="#333333", font=font)
+    # 標題與標籤文字[cite: 2]
+    draw.text((plot_x0 + 80, 8), "Time-Current Characteristic", fill="#111111", font=font)
+    draw.text((plot_x0 + 60, plot_y1 + 22), f"Current (A) [Reflected to {v_base_kv}]", fill="#333333", font=font)
 
-    # 畫圖例 (Legend)
+    # 畫圖例 (Legend)[cite: 2]
     leg_x = plot_x1 - 105
     leg_y = plot_y0 + 10
     for name, color in legend_items:
@@ -218,11 +218,12 @@ def render_trip_curve_pil(stage_configs, default_colors):
 def main(page: ft.Page):
     page.title = "保護協調曲線 (Schneider Electric)"
     page.theme_mode = ft.ThemeMode.LIGHT
-    page.padding = 4
-    page.spacing = 4
+    page.padding = 6
+    page.spacing = 6
 
-    page.window.width = 873
-    page.window.height = 393
+    # 調整為直式 UI 尺寸[cite: 2]
+    page.window.width = 480
+    page.window.height = 840
     page.window.resizable = True
 
     default_colors = ["#E63946", "#F4A261", "#2A9D8F", "#457B9D", "#1D3557", "#8D99AE"]
@@ -237,7 +238,7 @@ def main(page: ft.Page):
     ]
 
     current_selected_index = [0]
-    IMG_W, IMG_H = 580, 370
+    IMG_W, IMG_H = FIG_W_PX, FIG_H_PX
 
     chart_image = ft.Image(src="", fit="fill", width=IMG_W, height=IMG_H)
 
@@ -279,8 +280,8 @@ def main(page: ft.Page):
         border_radius=5,
         shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="black12"),
         visible=False,
-        top=45,
-        right=32,
+        top=35,
+        right=25,
         width=120,
     )
 
@@ -366,25 +367,25 @@ def main(page: ft.Page):
             on_hover=on_chart_hover,
             on_exit=on_chart_exit,
         ),
-        width=IMG_W,
-        height=IMG_H,
+        alignment=ft.Alignment(0, 0),
     )
 
-    INPUT_HEIGHT = 54
+    # 調整輸入框高度與內距提升視覺美觀[cite: 2]
+    INPUT_HEIGHT = 48
     CHK_SLOT_WIDTH = 30
-    style_text_10 = ft.TextStyle(size=13)
-    pad_box = ft.Padding(8, 10, 8, 8)
+    style_text_10 = ft.TextStyle(size=12)
+    pad_box = ft.Padding(6, 6, 6, 6)
 
     dd_loop_select = ft.Dropdown(
         label="迴路",
         options=[ft.dropdown.Option(key=str(i), text=cfg["name"]) for i, cfg in enumerate(stage_configs)],
-        value="0", dense=True, text_size=10, label_style=style_text_10,
+        value="0", dense=True, text_size=11, label_style=style_text_10,
         content_padding=pad_box, height=INPUT_HEIGHT, expand=True
     )
     dd_voltage = ft.Dropdown(
         label="電壓(kV)",
         options=[ft.dropdown.Option(key=str(val), text=name) for name, val in VOLTAGE_OPTIONS],
-        dense=True, text_size=10, label_style=style_text_10,
+        dense=True, text_size=11, label_style=style_text_10,
         content_padding=pad_box, height=INPUT_HEIGHT, expand=True
     )
 
@@ -393,25 +394,25 @@ def main(page: ft.Page):
     dd_std = ft.Dropdown(
         label="標準",
         options=[ft.dropdown.Option("IEC"), ft.dropdown.Option("IEEE"), ft.dropdown.Option("IEEE2")],
-        dense=True, expand=True, text_size=10, label_style=style_text_10,
+        dense=True, expand=True, text_size=11, label_style=style_text_10,
         content_padding=pad_box, height=INPUT_HEIGHT
     )
     dd_type = ft.Dropdown(
         label="型態", options=[], dense=True, expand=True,
-        text_size=10, label_style=style_text_10, content_padding=pad_box, height=INPUT_HEIGHT
+        text_size=11, label_style=style_text_10, content_padding=pad_box, height=INPUT_HEIGHT
     )
     
-    tf_ip = ft.TextField(label="51 Ip (A)", dense=True, expand=True, text_size=10, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
-    tf_tms = ft.TextField(label="TMS/TD", dense=True, expand=True, text_size=10, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
+    tf_ip = ft.TextField(label="51 Ip (A)", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
+    tf_tms = ft.TextField(label="TMS/TD", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
 
     chk_enable_50 = ft.Checkbox(value=False)
-    tf_inst_ip = ft.TextField(label="50 Ip (A)", dense=True, expand=True, text_size=10, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
-    tf_inst_time = ft.TextField(label="時間 (s)", dense=True, expand=True, text_size=10, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
+    tf_inst_ip = ft.TextField(label="50 Ip (A)", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
+    tf_inst_time = ft.TextField(label="時間 (s)", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
 
-    tf_test_I = ft.TextField(label="電流(A)", dense=True, expand=True, text_size=10, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
+    tf_test_I = ft.TextField(label="電流(A)", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
     tf_test_result = ft.TextField(
         label="跳脫時間 (s)", value="-", read_only=True, dense=True, expand=True,
-        text_size=10, label_style=style_text_10, content_padding=pad_box, height=INPUT_HEIGHT,
+        text_size=11, label_style=style_text_10, content_padding=pad_box, height=INPUT_HEIGHT,
         text_style=ft.TextStyle(color="#E63946", weight=ft.FontWeight.BOLD)
     )
 
@@ -455,6 +456,7 @@ def main(page: ft.Page):
         except ValueError:
             tf_test_result.value = "格式錯誤"
 
+    # 原封不動的資料寫入邏輯[cite: 2]
     def load_loop_data_to_ui(idx: int):
         cfg = stage_configs[idx]
         dd_voltage.value = str(cfg["voltage"])
@@ -474,6 +476,7 @@ def main(page: ft.Page):
         update_type_options(dd_std.value)
         update_and_redraw(e)
 
+    # 原封不動的選擇迴路處理[cite: 2]
     def on_loop_selected(e):
         if e.control.value is not None:
             idx = int(e.control.value)
@@ -511,7 +514,7 @@ def main(page: ft.Page):
         update_test_current_result()
         tf_test_result.update()
 
-    # 綁定事件
+    # 原封不動的事件綁定機制[cite: 2]
     dd_loop_select.on_select = on_loop_selected
     dd_voltage.on_select = update_and_redraw
     dd_std.on_select = on_std_changed
@@ -527,15 +530,21 @@ def main(page: ft.Page):
 
     tf_test_I.on_change = on_test_I_changed
 
-    # 初始載入 IED_1
+    # 初始載入 IED_1[cite: 2]
     load_loop_data_to_ui(0)
     chart_image.src = generate_static_chart_src()
 
-    left_panel = ft.Container(content=chart_container, expand=72, alignment=ft.Alignment(-1, -1), padding=0)
-    right_panel = ft.Container(
+    # --- 調整版面結構為直向 Stack/Column 上下分割 ---[cite: 2]
+    top_panel = ft.Container(
+        content=chart_container,
+        alignment=ft.Alignment(0, 0),
+        padding=0
+    )
+
+    bottom_panel = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("⚡ 保護參數設定", size=11, weight=ft.FontWeight.BOLD),
+                ft.Text("⚡ 保護參數設定", size=12, weight=ft.FontWeight.BOLD),
                 ft.Row([ft.Container(width=CHK_SLOT_WIDTH), dd_loop_select, dd_voltage], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Divider(height=1),
                 ft.Row([ft.Container(width=CHK_SLOT_WIDTH, content=chk_enable_51, alignment=ft.Alignment(0, 0)), dd_std, dd_type], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
@@ -543,24 +552,27 @@ def main(page: ft.Page):
                 ft.Divider(height=1),
                 ft.Row([ft.Container(width=CHK_SLOT_WIDTH, content=chk_enable_50, alignment=ft.Alignment(0, 0)), tf_inst_ip, tf_inst_time], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
                 ft.Divider(height=1),
-                ft.Text("🎯 電流測試試算", size=10, weight=ft.FontWeight.BOLD, color="#1D3557"),
+                ft.Text("🎯 電流測試試算", size=11, weight=ft.FontWeight.BOLD, color="#1D3557"),
                 ft.Row([ft.Container(width=CHK_SLOT_WIDTH), tf_test_I, tf_test_result], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ],
-            spacing=5,
-            scroll=ft.ScrollMode.AUTO,
+            spacing=4,
         ),
-        expand=28,
-        padding=6,
+        padding=8,
         border=ft.Border.all(1, "#DDDDDD"),
-        border_radius=5,
+        border_radius=8,
         bgcolor="#FAFAFA",
+        expand=True,
     )
 
     page.add(
-        ft.Row(
-            controls=[left_panel, right_panel],
+        ft.Column(
+            controls=[
+                top_panel,
+                bottom_panel,
+            ],
             expand=True,
-            vertical_alignment=ft.CrossAxisAlignment.START,
+            spacing=6,
+            scroll=ft.ScrollMode.AUTO,
         )
     )
 
