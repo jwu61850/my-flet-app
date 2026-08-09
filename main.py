@@ -1,13 +1,41 @@
 import os
 import sys
+import zipfile
 import tempfile
 
-# 1. 強制設定 matplotlib 使用無介面後端 (Agg)，防止 Android 介面衝突
+# ==========================================
+# 1. 第一步：環境修復 (必須放在最頂端)
+# ==========================================
+try:
+    import matplotlib
+except ImportError:
+    pass
+else:
+    # 檢查是否運行在 Zip 壓縮套件環境下
+    if "sitepackages.zip" in matplotlib.__file__:
+        temp_dir = os.path.join(tempfile.gettempdir(), "mpl_data")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # 尋找並解壓 mpl-data 至實體目錄
+        zip_path = matplotlib.__file__.split("sitepackages.zip")[0] + "sitepackages.zip"
+        if os.path.exists(zip_path):
+            with zipfile.ZipFile(zip_path, 'r') as z:
+                for file in z.namelist():
+                    if "matplotlib/mpl-data" in file:
+                        z.extract(file, tempfile.gettempdir())
+            
+            # 將 Matplotlib 設定目錄重定向到解壓後的實體路徑
+            extracted_mpl_data = os.path.join(tempfile.gettempdir(), "matplotlib", "mpl-data")
+            os.environ['MATPLOTLIBDATA'] = extracted_mpl_data
+
+# 強制設定繪圖後端與暫存目錄
 import matplotlib
 matplotlib.use('Agg')
-
-# 2. 如果依然找不到設定檔，手動指向系統暫存資料夾
 os.environ['MPLCONFIGDIR'] = tempfile.gettempdir()
+
+# ==========================================
+# 2. 第二步：原本的繪圖與套件引用 (一定要保留)
+# ==========================================
 import base64
 import io
 import warnings
