@@ -280,7 +280,11 @@ def main(page: ft.Page):
     IMG_W, IMG_H = FIG_W_PX, FIG_H_PX
 
     chart_image = ft.Image(src="", fit="fill", width=IMG_W, height=IMG_H)
-
+    
+    # 建議將圖表容器改為滿版自適應
+    #chart_image = ft.Image(src="", fit="contain", expand=True)
+    
+    
     cursor_line = ft.Container(
         content=ft.Column(
             controls=[ft.Container(height=4, width=1.5, bgcolor="#E63946") for _ in range(40)],
@@ -319,7 +323,7 @@ def main(page: ft.Page):
         border_radius=5,
         shadow=ft.BoxShadow(spread_radius=1, blur_radius=4, color="black12"),
         visible=False,
-        top=35,
+        top=42,
         right=25,
         width=120,
     )
@@ -339,14 +343,22 @@ def main(page: ft.Page):
             selected_idx=current_selected_index[0]
         )
 
+    '''我們需要使用 LayoutControl 的動態寬度 (e.control.width)，或是使用相對比例（0.0 ~ 1.0）來計算座標，讓手指觸控點擊的位置能自動適應任何螢幕寬度與旋轉方向。'''
+    
     def on_chart_hover(e):
+        # 取得 Stack 內部的局部 X 座標 (0 ~ 500)
         px = getattr(e.local_position, "x", None) if hasattr(e, "local_position") and e.local_position else getattr(e, "x", None)
         if px is None:
             return
 
-        x_min_px = IMG_W * LEFT_MARGIN
-        x_max_px = IMG_W * RIGHT_MARGIN
+        # 1. 動態取得當前 Stack / Container 渲染的實際寬度（若取不到則退回 IMG_W）
+        container_w = e.control.width if (hasattr(e, "control") and e.control and e.control.width) else IMG_W
 
+        # 2. 根據實際渲染寬度計算邊界
+        x_min_px = container_w * LEFT_MARGIN
+        x_max_px = container_w * RIGHT_MARGIN
+
+        # 超出繪圖區邊界則隱藏
         if px < x_min_px or px > x_max_px:
             if cursor_line.visible or hover_card.visible:
                 cursor_line.visible = False
@@ -355,7 +367,10 @@ def main(page: ft.Page):
                 hover_card.update()
             return
 
+        # 3. 計算歸一化比例 (0.0 ~ 1.0)
         norm_x = (px - x_min_px) / (x_max_px - x_min_px)
+        
+        # 4. 對數座標換算 (10^1 到 10^5 A)
         calc_I = 10 ** (1.0 + norm_x * 4.0)
 
         cursor_line.left = px
@@ -399,6 +414,7 @@ def main(page: ft.Page):
         cursor_line.update()
         hover_card.update()
 
+
     def on_chart_exit(e):
         if cursor_line.visible or hover_card.visible:
             cursor_line.visible = False
@@ -411,6 +427,16 @@ def main(page: ft.Page):
         width=IMG_W,
         height=IMG_H,
     )
+    
+    #chart_stack = ft.Stack(
+    #    controls=[chart_image, cursor_line, hover_card],
+    #    expand=True,
+    #)
+    
+    
+    
+    
+    
 
     def handle_touch_gesture(e):
         px = None
