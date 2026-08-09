@@ -1,7 +1,3 @@
-certifi
-numpy
-pandas
-matplotlib
 flet
-
-
+numpy
+pillow

@@ -1,56 +1,9 @@
-import os
-import sys
-import tempfile
-
-# =========================================================================
-# 🛠️ 激進修復 (對抗 Matplotlib NotADirectoryError) - 必須在最優先行 🛠️
-# =========================================================================
-
-# 1. 欺騙：指定一個空的實體資料夾作為設定目錄，讓它找不到 matplotlibrc 也不會報錯
-empty_mpl_config = os.path.join(tempfile.gettempdir(), ".matplotlib_empty")
-os.makedirs(empty_mpl_config, exist_ok=True)
-os.environ['MPLCONFIGDIR'] = empty_mpl_config
-
-# 2. 欺騙：強制指定一個無效但不是 ZIP 的路徑作為 MATPLOTLIBDATA，防止它進入 ZIP 查找
-os.environ['MATPLOTLIBDATA'] = empty_mpl_config
-
-# 3. 強制設定繪圖後端為無介面 (Agg)，這是解決 GUI 渲染卡住的關鍵
-import matplotlib
-matplotlib.use('Agg')
-
-# =========================================================================
-# 接下來才 import 你的其他繪圖套件 (一定要保留)
-# =========================================================================
-try:
-    import matplotlib.pyplot as plt
-    from matplotlib.ticker import FuncFormatter
-    print("[MPL] Matplotlib initialized successfully with aggressive fixes.")
-except Exception as e:
-    print(f"[MPL] Still failed to initialize: {e}")
-
 import base64
 import io
-import warnings
-import logging
+import math
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
 import flet as ft
-
-# 關閉全域 SSL 憑證驗證
-#import ssl
-#ssl._create_default_https_context = ssl._create_unverified_context
-
-# -----------------------------------------------------------------------------
-# 徹底消除 Matplotlib 負號與字型警告
-# -----------------------------------------------------------------------------
-warnings.filterwarnings("ignore", category=UserWarning)
-logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
-logging.getLogger('matplotlib').setLevel(logging.ERROR)
-
-plt.rcParams['mathtext.fontset'] = 'cm'
-plt.rcParams['font.sans-serif'] = ['Microsoft JhengHei', 'SimHei', 'Arial Unicode MS', 'DejaVu Sans']
-plt.rcParams['axes.unicode_minus'] = False
+from PIL import Image, ImageDraw, ImageFont
 
 # 標稱電壓列表
 VOLTAGE_OPTIONS = [
@@ -72,7 +25,8 @@ CURVE_FAMILY_MAP = {
     "IEEE2": ["MI", "NI", "VI", "EI"]
 }
 
-FIG_W, FIG_H = 5.8, 3.7
+# 繪圖尺寸與邊界參數 (對齊原 Matplotlib 圖表比例)
+FIG_W_PX, FIG_H_PX = 580, 370
 LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95
 TOP_MARGIN, BOTTOM_MARGIN = 0.88, 0.14
 
@@ -143,6 +97,122 @@ def calc_trip_time(standard, curve_type, I_base, Ip_base, TMS_TD, enable_51, ena
     return t
 
 # -----------------------------------------------------------------------------
+# 純 PIL 高效對數圖表繪製引擎 (替代 Matplotlib)
+# -----------------------------------------------------------------------------
+def render_trip_curve_pil(stage_configs, default_colors):
+    img = Image.new("RGB", (FIG_W_PX, FIG_H_PX), "white")
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.load_default()
+
+    x_min, x_max = 10.0, 100000.0
+    y_min, y_max = 0.001, 360.0
+
+    log_x_min, log_x_max = math.log10(x_min), math.log10(x_max)
+    log_y_min, log_y_max = math.log10(y_min), math.log10(y_max)
+
+    plot_x0 = int(FIG_W_PX * LEFT_MARGIN)
+    plot_x1 = int(FIG_W_PX * RIGHT_MARGIN)
+    plot_y0 = int(FIG_H_PX * (1 - TOP_MARGIN))
+    plot_y1 = int(FIG_H_PX * (1 - BOTTOM_MARGIN))
+
+    def val_to_px(val_x, val_y):
+        lx = math.log10(max(val_x, x_min))
+        ly = math.log10(max(val_y, y_min))
+        px = plot_x0 + (lx - log_x_min) / (log_x_max - log_x_min) * (plot_x1 - plot_x0)
+        py = plot_y1 - (ly - log_y_min) / (log_y_max - log_y_min) * (plot_y1 - plot_y0)
+        return px, py
+
+    # 畫背景外框
+    draw.rectangle([plot_x0, plot_y0, plot_x1, plot_y1], outline="#333333", width=1)
+
+    # 畫 X 軸對數網格
+    for dec in range(1, 6):
+        base_val = 10**dec
+        for sub in range(1, 10):
+            v = base_val * sub
+            if v > x_max: break
+            px, _ = val_to_px(v, y_min)
+            is_major = (sub == 1)
+            draw.line([(px, plot_y0), (px, plot_y1)], fill="#E0E0E0" if not is_major else "#B0BEC5", width=1)
+            if is_major and px <= plot_x1:
+                label = f"{int(v)}" if v < 1000 else f"{int(v//1000)}k"
+                draw.text((px - 8, plot_y1 + 4), label, fill="#333333", font=font)
+
+    # 畫 Y 軸對數網格
+    y_ticks = [0.001, 0.01, 0.1, 1, 10, 100]
+    for y_val in y_ticks:
+        _, py = val_to_px(x_min, y_val)
+        draw.line([(plot_x0, py), (plot_x1, py)], fill="#B0BEC5", width=1)
+        draw.text((plot_x0 - 32, py - 6), f"{y_val:g}", fill="#333333", font=font)
+
+    # 繪製各迴路 Trip Curve
+    active_voltages = [cfg["voltage"] for cfg in stage_configs if cfg["enable_51"] or cfg["enable_50"]]
+    v_base = max(active_voltages) if active_voltages else 161000.0
+    v_base_kv = f"{v_base/1000:.2f}kV" if v_base >= 1000 else f"{int(v_base)}V"
+
+    I_base_range = np.logspace(np.log10(x_min), np.log10(x_max), 600)
+    legend_items = []
+
+    for i, config in enumerate(stage_configs):
+        if not config["enable_51"] and not config["enable_50"]:
+            continue
+
+        ratio = config["voltage"] / v_base
+        ip_base = config["ip"] * ratio
+        inst_ip_base = config["inst_ip"] * ratio
+
+        if not config["enable_51"] and config["enable_50"]:
+            I_curve = np.array([inst_ip_base, inst_ip_base, x_max])
+            t_curve = np.array([y_max, config["inst_time"], config["inst_time"]])
+        else:
+            I_curve = I_base_range.copy()
+            t_curve = calc_trip_time(
+                standard=config["std"], curve_type=config["type"], I_base=I_curve, 
+                Ip_base=ip_base, TMS_TD=config["tms"], enable_51=config["enable_51"],
+                enable_50=config["enable_50"], inst_ip_base=inst_ip_base, inst_time=config["inst_time"]
+            )
+
+            if config["enable_51"] and config["enable_50"] and inst_ip_base > 0:
+                t_51_at_inst = calc_trip_time(
+                    standard=config["std"], curve_type=config["type"], I_base=np.array([inst_ip_base]),
+                    Ip_base=ip_base, TMS_TD=config["tms"], enable_51=True, enable_50=False,
+                    inst_ip_base=0, inst_time=0
+                )[0]
+                if not np.isnan(t_51_at_inst) and t_51_at_inst > config["inst_time"]:
+                    idx = np.searchsorted(I_curve, inst_ip_base)
+                    I_curve = np.insert(I_curve, idx, inst_ip_base)
+                    t_curve = np.insert(t_curve, idx, t_51_at_inst)
+
+        # 將座標轉為點陣繪圖點
+        pts = []
+        for ix, tx in zip(I_curve, t_curve):
+            if not np.isnan(tx) and y_min <= tx <= y_max:
+                pts.append(val_to_px(ix, tx))
+
+        if len(pts) > 1:
+            draw.line(pts, fill=default_colors[i], width=2)
+
+        v_str = f"{config['voltage']/1000:.1f}kV" if config['voltage'] >= 1000 else f"{int(config['voltage'])}V"
+        legend_items.append((f"{config['name']} ({v_str})", default_colors[i]))
+
+    # 標題與標籤文字
+    draw.text((plot_x0 + 110, 8), "Time-Current Characteristic", fill="#111111", font=font)
+    draw.text((plot_x0 + 80, plot_y1 + 22), f"Current (A) [Reflected to {v_base_kv}]", fill="#333333", font=font)
+
+    # 畫圖例 (Legend)
+    leg_x = plot_x1 - 105
+    leg_y = plot_y0 + 10
+    for name, color in legend_items:
+        draw.rectangle([leg_x, leg_y + 2, leg_x + 10, leg_y + 8], fill=color)
+        draw.text((leg_x + 14, leg_y - 1), name, fill="#222222", font=font)
+        leg_y += 12
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    img_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f"data:image/png;base64,{img_b64}"
+
+# -----------------------------------------------------------------------------
 # Flet 主應用程式
 # -----------------------------------------------------------------------------
 def main(page: ft.Page):
@@ -160,7 +230,7 @@ def main(page: ft.Page):
     stage_configs = [
         {"name": "IED_1", "voltage": 161000.0, "enable_51": True,  "std": "IEC",   "type": "NI", "ip": 200,  "tms": 0.4, "enable_50": True,  "inst_ip": 1200, "inst_time": 0.03},
         {"name": "IED_2", "voltage": 22800.0,  "enable_51": True,  "std": "IEC",   "type": "NI", "ip": 800,  "tms": 0.3, "enable_50": True,  "inst_ip": 7000, "inst_time": 0.02},
-        {"name": "IED_3", "voltage": 11400.0,  "enable_51": True,  "std": "IEC",  "type": "NI", "ip": 1500, "tms": 0.2, "enable_50": True,  "inst_ip": 12000, "inst_time": 0.01},
+        {"name": "IED_3", "voltage": 11400.0,  "enable_51": True,  "std": "IEC",   "type": "NI", "ip": 1500, "tms": 0.2, "enable_50": True,  "inst_ip": 12000, "inst_time": 0.01},
         {"name": "IED_4", "voltage": 380.0,    "enable_51": False, "std": "IEEE2", "type": "EI", "ip": 800,  "tms": 0.4, "enable_50": False, "inst_ip": 3000, "inst_time": 0.03},
         {"name": "IED_5", "voltage": 4160.0,   "enable_51": False, "std": "IEEE",  "type": "VI", "ip": 1200, "tms": 0.5, "enable_50": False, "inst_ip": 10000,"inst_time": 0.03},
         {"name": "IED_6", "voltage": 220.0,    "enable_51": False, "std": "IEEE",  "type": "VI", "ip": 2000, "tms": 0.6, "enable_50": False, "inst_ip": 15000,"inst_time": 0.03},
@@ -169,7 +239,6 @@ def main(page: ft.Page):
     current_selected_index = [0]
     IMG_W, IMG_H = 580, 370
 
-    # 1. 修正 Image fit 為 FILL，防止圖片在容器內置中拉伸產生內邊距
     chart_image = ft.Image(src="", fit="fill", width=IMG_W, height=IMG_H)
 
     cursor_line = ft.Container(
@@ -216,75 +285,7 @@ def main(page: ft.Page):
     )
 
     def generate_static_chart_src():
-        fig = plt.figure(figsize=(FIG_W, FIG_H), dpi=100)
-        ax = fig.add_axes([LEFT_MARGIN, BOTTOM_MARGIN, RIGHT_MARGIN - LEFT_MARGIN, TOP_MARGIN - BOTTOM_MARGIN])
-
-        active_voltages = [cfg["voltage"] for cfg in stage_configs if cfg["enable_51"] or cfg["enable_50"]]
-        v_base = max(active_voltages) if active_voltages else 161000.0
-        v_base_kv = f"{v_base/1000:.2f}kV" if v_base >= 1000 else f"{int(v_base)}V"
-        
-        ax.set_title("Time-Current Characteristic", fontsize=9.5, fontweight="bold")
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_xlim(10, 100000)
-        ax.set_ylim(0.001, 360)
-
-        # 強制 Y 軸時間顯示為實數小數（解決科學符號負號方塊問題）
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{y:g}"))
-
-        I_base_range = np.logspace(np.log10(10), np.log10(100000), 1200)
-
-        lines, labels = [], []
-
-        for i, config in enumerate(stage_configs):
-            if not config["enable_51"] and not config["enable_50"]:
-                continue
-
-            ratio = config["voltage"] / v_base
-            ip_base = config["ip"] * ratio
-            inst_ip_base = config["inst_ip"] * ratio
-
-            if not config["enable_51"] and config["enable_50"]:
-                I_curve = np.array([inst_ip_base, inst_ip_base, 100000.0])
-                t_curve = np.array([360.0, config["inst_time"], config["inst_time"]])
-            else:
-                I_curve = I_base_range.copy()
-                t_curve = calc_trip_time(
-                    standard=config["std"], curve_type=config["type"], I_base=I_curve, 
-                    Ip_base=ip_base, TMS_TD=config["tms"], enable_51=config["enable_51"],
-                    enable_50=config["enable_50"], inst_ip_base=inst_ip_base, inst_time=config["inst_time"]
-                )
-
-                if config["enable_51"] and config["enable_50"] and inst_ip_base > 0:
-                    t_51_at_inst = calc_trip_time(
-                        standard=config["std"], curve_type=config["type"], I_base=np.array([inst_ip_base]),
-                        Ip_base=ip_base, TMS_TD=config["tms"], enable_51=True, enable_50=False,
-                        inst_ip_base=0, inst_time=0
-                    )[0]
-                    if not np.isnan(t_51_at_inst) and t_51_at_inst > config["inst_time"]:
-                        idx = np.searchsorted(I_curve, inst_ip_base)
-                        I_curve = np.insert(I_curve, idx, inst_ip_base)
-                        t_curve = np.insert(t_curve, idx, t_51_at_inst)
-
-            line_obj, = ax.plot(I_curve, t_curve, color=default_colors[i], linewidth=1.8)
-            lines.append(line_obj)
-
-            v_str = f"{config['voltage']/1000:.1f}kV" if config['voltage'] >= 1000 else f"{int(config['voltage'])}V"
-            labels.append(f"{config['name']} ({v_str}):")
-
-        if lines:
-            ax.legend(handles=lines, labels=labels, loc="upper right", fontsize=7, framealpha=0.95)
-
-        ax.set_xlabel(f"Current (A) [Reflected to {v_base_kv}]", fontsize=8, fontweight="bold")
-        ax.set_ylabel("Time (s)", fontsize=8, fontweight="bold")
-        ax.grid(True, which="both", ls="--", lw=0.4, alpha=0.7)
-
-        buf = io.BytesIO()
-        plt.savefig(buf, format="png", dpi=100)
-        buf.seek(0)
-        img_b64 = base64.b64encode(buf.read()).decode("utf-8")
-        plt.close(fig)
-        return f"data:image/png;base64,{img_b64}"
+        return render_trip_curve_pil(stage_configs, default_colors)
 
     def on_chart_hover(e):
         px = getattr(e.local_position, "x", None) if hasattr(e, "local_position") and e.local_position else getattr(e, "x", None)
@@ -294,7 +295,6 @@ def main(page: ft.Page):
         x_min_px = IMG_W * LEFT_MARGIN
         x_max_px = IMG_W * RIGHT_MARGIN
 
-        # 2. 嚴格邊界檢查：超出繪圖黑框區域（10A ~ 100,000A 外圍）時立即關閉游標
         if px < x_min_px or px > x_max_px:
             if cursor_line.visible or hover_card.visible:
                 cursor_line.visible = False
@@ -306,19 +306,9 @@ def main(page: ft.Page):
         norm_x = (px - x_min_px) / (x_max_px - x_min_px)
         calc_I = 10 ** (1.0 + norm_x * 4.0)
 
-        # 移動紅色虛線游標
         cursor_line.left = px
         cursor_line.visible = True
 
-        # 3. 滑鼠在圖表右半邊時，將 Hover 數據卡切換到左邊，防止擋住游標或超出螢幕
-        #if norm_x > 0.5:
-        #    hover_card.left = 45
-        #    hover_card.right = None
-        #else:
-        #    hover_card.left = None
-        #    hover_card.right = 35
-
-        # 計算當前電流下各迴路的動作時間
         active_voltages = [cfg["voltage"] for cfg in stage_configs if cfg["enable_51"] or cfg["enable_50"]]
         v_base = max(active_voltages) if active_voltages else 161000.0
 
@@ -370,7 +360,6 @@ def main(page: ft.Page):
         height=IMG_H,
     )
 
-    # 固定 GestureDetector 容器尺寸為 580x370
     chart_container = ft.Container(
         content=ft.GestureDetector(
             content=chart_stack,
