@@ -34,7 +34,7 @@ jobs:
       - name: Install Python Dependencies & Flet CLI
         run: |
           python -m pip install --upgrade pip
-          pip install flet flet-cli serious_python
+          pip install flet flet-cli
 
       - name: Build Android APK with Flet
         run: |
