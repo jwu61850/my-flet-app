@@ -279,7 +279,8 @@ def main(page: ft.Page):
     current_selected_index = [0]
     IMG_W, IMG_H = FIG_W_PX, FIG_H_PX
 
-    chart_image = ft.Image(src="", fit="fill", width=IMG_W, height=IMG_H)
+    #chart_image = ft.Image(src="", fit="fill", width=IMG_W, height=IMG_H)
+    chart_image = ft.Image(src="", fit="fill", width=FIG_W_PX, height=FIG_H_PX)
     
     # 建議將圖表容器改為滿版自適應
     #chart_image = ft.Image(src="", fit="contain", expand=True)
@@ -422,10 +423,16 @@ def main(page: ft.Page):
             cursor_line.update()
             hover_card.update()
 
+    #chart_stack = ft.Stack(
+    #    controls=[chart_image, cursor_line, hover_card],
+    #    width=IMG_W,
+    #    height=IMG_H,
+    #)
+    
     chart_stack = ft.Stack(
         controls=[chart_image, cursor_line, hover_card],
-        width=IMG_W,
-        height=IMG_H,
+        width=FIG_W_PX,
+        height=FIG_H_PX,
     )
     
     #chart_stack = ft.Stack(
