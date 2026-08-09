@@ -97,9 +97,9 @@ def calc_trip_time(standard, curve_type, I_base, Ip_base, TMS_TD, enable_51, ena
     return t
 
 # -----------------------------------------------------------------------------
-# 純 PIL 高效對數圖表繪製引擎[cite: 2]
+# PIL 高效對數圖表繪製引擎 (加入測試電流虛線與時間標記)[cite: 2]
 # -----------------------------------------------------------------------------
-def render_trip_curve_pil(stage_configs, default_colors):
+def render_trip_curve_pil(stage_configs, default_colors, test_i_input=None, selected_idx=0):
     img = Image.new("RGB", (FIG_W_PX, FIG_H_PX), "white")
     draw = ImageDraw.Draw(img)
     font = ImageFont.load_default()
@@ -145,7 +145,7 @@ def render_trip_curve_pil(stage_configs, default_colors):
         draw.line([(plot_x0, py), (plot_x1, py)], fill="#B0BEC5", width=1)
         draw.text((plot_x0 - 32, py - 6), f"{y_val:g}", fill="#333333", font=font)
 
-    # 繪製各迴路 Trip Curve[cite: 2]
+    # 基準電壓[cite: 2]
     active_voltages = [cfg["voltage"] for cfg in stage_configs if cfg["enable_51"] or cfg["enable_50"]]
     v_base = max(active_voltages) if active_voltages else 161000.0
     v_base_kv = f"{v_base/1000:.2f}kV" if v_base >= 1000 else f"{int(v_base)}V"
@@ -183,7 +183,6 @@ def render_trip_curve_pil(stage_configs, default_colors):
                     I_curve = np.insert(I_curve, idx, inst_ip_base)
                     t_curve = np.insert(t_curve, idx, t_51_at_inst)
 
-        # 將座標轉為點陣繪圖點[cite: 2]
         pts = []
         for ix, tx in zip(I_curve, t_curve):
             if not np.isnan(tx) and y_min <= tx <= y_max:
@@ -194,6 +193,47 @@ def render_trip_curve_pil(stage_configs, default_colors):
 
         v_str = f"{config['voltage']/1000:.1f}kV" if config['voltage'] >= 1000 else f"{int(config['voltage'])}V"
         legend_items.append((f"{config['name']} ({v_str})", default_colors[i]))
+
+    # --- 新增：繪製測試電流紅色虛線與各迴路跳脫點標籤 ---
+    if test_i_input is not None and test_i_input > 0:
+        sel_cfg = stage_configs[selected_idx]
+        # 將輸入的測試電流根據「當前選擇迴路的電壓」換算至基準電壓 V_base 側
+        test_i_reflected = test_i_input * (sel_cfg["voltage"] / v_base)
+
+        if x_min <= test_i_reflected <= x_max:
+            px_test, _ = val_to_px(test_i_reflected, y_min)
+
+            # 繪製紅色虛線
+            dash_len = 4
+            for y_curr in range(plot_y0, plot_y1, dash_len * 2):
+                y_next = min(y_curr + dash_len, plot_y1)
+                draw.line([(px_test, y_curr), (px_test, y_next)], fill="#E63946", width=2)
+
+            # 虛線上方顯示測試電流數值
+            draw.text((px_test + 3, plot_y0 + 2), f"I={test_i_input:g}A", fill="#E63946", font=font)
+
+            # 標示各迴路在此測試電流下的動作點
+            for i, config in enumerate(stage_configs):
+                if not config["enable_51"] and not config["enable_50"]:
+                    continue
+
+                ratio = config["voltage"] / v_base
+                ip_base = config["ip"] * ratio
+                inst_ip_base = config["inst_ip"] * ratio
+
+                t_val = calc_trip_time(
+                    standard=config["std"], curve_type=config["type"], I_base=np.array([test_i_reflected]),
+                    Ip_base=ip_base, TMS_TD=config["tms"], enable_51=config["enable_51"],
+                    enable_50=config["enable_50"], inst_ip_base=inst_ip_base, inst_time=config["inst_time"]
+                )[0]
+
+                if not np.isnan(t_val) and y_min <= t_val <= y_max:
+                    _, py_val = val_to_px(test_i_reflected, t_val)
+                    # 畫小實心圓點
+                    r = 3
+                    draw.ellipse([px_test - r, py_val - r, px_test + r, py_val + r], fill=default_colors[i], outline="white")
+                    # 標註跳脫時間文字
+                    draw.text((px_test + 5, py_val - 5), f"{t_val:.3f}s", fill=default_colors[i], font=font)
 
     # 標題與標籤文字[cite: 2]
     draw.text((plot_x0 + 80, 8), "Time-Current Characteristic", fill="#111111", font=font)
@@ -213,7 +253,7 @@ def render_trip_curve_pil(stage_configs, default_colors):
     return f"data:image/png;base64,{img_b64}"
 
 # -----------------------------------------------------------------------------
-# Flet 主應用程式
+# Flet 主應用程式[cite: 2]
 # -----------------------------------------------------------------------------
 def main(page: ft.Page):
     page.title = "保護協調曲線 (Schneider Electric)"
@@ -221,7 +261,6 @@ def main(page: ft.Page):
     page.padding = 6
     page.spacing = 6
 
-    # 調整為直式 UI 尺寸[cite: 2]
     page.window.width = 480
     page.window.height = 840
     page.window.resizable = True
@@ -285,8 +324,20 @@ def main(page: ft.Page):
         width=120,
     )
 
+    def get_current_test_i():
+        try:
+            val = float(tf_test_I.value.strip())
+            return val if val > 0 else None
+        except (ValueError, AttributeError):
+            return None
+
     def generate_static_chart_src():
-        return render_trip_curve_pil(stage_configs, default_colors)
+        return render_trip_curve_pil(
+            stage_configs, 
+            default_colors, 
+            test_i_input=get_current_test_i(),
+            selected_idx=current_selected_index[0]
+        )
 
     def on_chart_hover(e):
         px = getattr(e.local_position, "x", None) if hasattr(e, "local_position") and e.local_position else getattr(e, "x", None)
@@ -361,16 +412,32 @@ def main(page: ft.Page):
         height=IMG_H,
     )
 
+    def handle_touch_gesture(e):
+        px = None
+        if hasattr(e, "local_position") and e.local_position:
+            px = e.local_position.x
+        elif hasattr(e, "local_x") and e.local_x is not None:
+            px = e.local_x
+        elif hasattr(e, "x"):
+            px = e.x
+
+        if px is None:
+            return
+
+        e.local_position = type('Pos', (), {'x': px})()
+        on_chart_hover(e)
+
     chart_container = ft.Container(
         content=ft.GestureDetector(
             content=chart_stack,
             on_hover=on_chart_hover,
+            on_tap_down=handle_touch_gesture,
+            on_pan_update=handle_touch_gesture,
             on_exit=on_chart_exit,
         ),
         alignment=ft.Alignment(0, 0),
     )
 
-    # 調整輸入框高度與內距提升視覺美觀[cite: 2]
     INPUT_HEIGHT = 48
     CHK_SLOT_WIDTH = 30
     style_text_10 = ft.TextStyle(size=12)
@@ -433,6 +500,8 @@ def main(page: ft.Page):
         val_str = tf_test_I.value.strip() if tf_test_I.value else ""
         if not val_str:
             tf_test_result.value = "-"
+            chart_image.src = generate_static_chart_src()
+            page.update()
             return
 
         try:
@@ -441,22 +510,30 @@ def main(page: ft.Page):
                 tf_test_result.value = "-"
             else:
                 ratio = cfg["voltage"] / v_base
+                test_i_reflected = test_i * ratio
                 ip_base = cfg["ip"] * ratio
                 inst_ip_base = cfg["inst_ip"] * ratio
 
                 t_val = calc_trip_time(
-                    standard=cfg["std"], curve_type=cfg["type"],
-                    I_base=np.array([test_i * ratio]),
-                    Ip_base=ip_base, TMS_TD=cfg["tms"],
-                    enable_51=cfg["enable_51"], enable_50=cfg["enable_50"],
-                    inst_ip_base=inst_ip_base, inst_time=cfg["inst_time"]
+                    standard=cfg["std"], 
+                    curve_type=cfg["type"],
+                    I_base=np.array([test_i_reflected]),
+                    Ip_base=ip_base, 
+                    TMS_TD=cfg["tms"],
+                    enable_51=cfg["enable_51"], 
+                    enable_50=cfg["enable_50"],
+                    inst_ip_base=inst_ip_base, 
+                    inst_time=cfg["inst_time"]
                 )[0]
 
                 tf_test_result.value = "不動作" if np.isnan(t_val) else f"{t_val:.3f}"
         except ValueError:
             tf_test_result.value = "格式錯誤"
 
-    # 原封不動的資料寫入邏輯[cite: 2]
+        # 更新圖表上的紅色虛線與動作點
+        chart_image.src = generate_static_chart_src()
+        page.update()
+
     def load_loop_data_to_ui(idx: int):
         cfg = stage_configs[idx]
         dd_voltage.value = str(cfg["voltage"])
@@ -476,14 +553,11 @@ def main(page: ft.Page):
         update_type_options(dd_std.value)
         update_and_redraw(e)
 
-    # 原封不動的選擇迴路處理[cite: 2]
     def on_loop_selected(e):
         if e.control.value is not None:
             idx = int(e.control.value)
             current_selected_index[0] = idx
             load_loop_data_to_ui(idx)
-            chart_image.src = generate_static_chart_src()
-            page.update()
 
     def update_and_redraw(e=None):
         idx = current_selected_index[0]
@@ -507,14 +581,11 @@ def main(page: ft.Page):
         except ValueError: cfg["inst_time"] = 0.03
 
         update_test_current_result()
-        chart_image.src = generate_static_chart_src()
-        page.update()
 
     def on_test_I_changed(e):
         update_test_current_result()
-        tf_test_result.update()
 
-    # 原封不動的事件綁定機制[cite: 2]
+    # 事件綁定
     dd_loop_select.on_select = on_loop_selected
     dd_voltage.on_select = update_and_redraw
     dd_std.on_select = on_std_changed
@@ -530,11 +601,9 @@ def main(page: ft.Page):
 
     tf_test_I.on_change = on_test_I_changed
 
-    # 初始載入 IED_1[cite: 2]
+    # 初始載入 IED_1
     load_loop_data_to_ui(0)
-    chart_image.src = generate_static_chart_src()
 
-    # --- 調整版面結構為直向 Stack/Column 上下分割 ---[cite: 2]
     top_panel = ft.Container(
         content=chart_container,
         alignment=ft.Alignment(0, 0),
