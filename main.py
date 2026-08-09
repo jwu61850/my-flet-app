@@ -1,41 +1,33 @@
 import os
 import sys
-import zipfile
 import tempfile
 
-# ==========================================
-# 1. 第一步：環境修復 (必須放在最頂端)
-# ==========================================
-try:
-    import matplotlib
-except ImportError:
-    pass
-else:
-    # 檢查是否運行在 Zip 壓縮套件環境下
-    if "sitepackages.zip" in matplotlib.__file__:
-        temp_dir = os.path.join(tempfile.gettempdir(), "mpl_data")
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        # 尋找並解壓 mpl-data 至實體目錄
-        zip_path = matplotlib.__file__.split("sitepackages.zip")[0] + "sitepackages.zip"
-        if os.path.exists(zip_path):
-            with zipfile.ZipFile(zip_path, 'r') as z:
-                for file in z.namelist():
-                    if "matplotlib/mpl-data" in file:
-                        z.extract(file, tempfile.gettempdir())
-            
-            # 將 Matplotlib 設定目錄重定向到解壓後的實體路徑
-            extracted_mpl_data = os.path.join(tempfile.gettempdir(), "matplotlib", "mpl-data")
-            os.environ['MATPLOTLIBDATA'] = extracted_mpl_data
+# =========================================================================
+# 🛠️ 激進修復 (對抗 Matplotlib NotADirectoryError) - 必須在最優先行 🛠️
+# =========================================================================
 
-# 強制設定繪圖後端與暫存目錄
+# 1. 欺騙：指定一個空的實體資料夾作為設定目錄，讓它找不到 matplotlibrc 也不會報錯
+empty_mpl_config = os.path.join(tempfile.gettempdir(), ".matplotlib_empty")
+os.makedirs(empty_mpl_config, exist_ok=True)
+os.environ['MPLCONFIGDIR'] = empty_mpl_config
+
+# 2. 欺騙：強制指定一個無效但不是 ZIP 的路徑作為 MATPLOTLIBDATA，防止它進入 ZIP 查找
+os.environ['MATPLOTLIBDATA'] = empty_mpl_config
+
+# 3. 強制設定繪圖後端為無介面 (Agg)，這是解決 GUI 渲染卡住的關鍵
 import matplotlib
 matplotlib.use('Agg')
-os.environ['MPLCONFIGDIR'] = tempfile.gettempdir()
 
-# ==========================================
-# 2. 第二步：原本的繪圖與套件引用 (一定要保留)
-# ==========================================
+# =========================================================================
+# 接下來才 import 你的其他繪圖套件 (一定要保留)
+# =========================================================================
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import FuncFormatter
+    print("[MPL] Matplotlib initialized successfully with aggressive fixes.")
+except Exception as e:
+    print(f"[MPL] Still failed to initialize: {e}")
+
 import base64
 import io
 import warnings
