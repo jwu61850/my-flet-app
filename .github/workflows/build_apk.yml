@@ -38,7 +38,7 @@ jobs:
 
       - name: Build Android APK with Flet
         run: |
-          flet build apk --arch arm64-v8a --verbose
+          flet build apk --arch arm64-v8a --no-site-packages-zip --verbose
 
       - name: Upload APK Artifact
         if: always()
