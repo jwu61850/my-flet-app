@@ -1,3 +1,13 @@
+import os
+import sys
+import tempfile
+
+# 1. 強制設定 matplotlib 使用無介面後端 (Agg)，防止 Android 介面衝突
+import matplotlib
+matplotlib.use('Agg')
+
+# 2. 如果依然找不到設定檔，手動指向系統暫存資料夾
+os.environ['MPLCONFIGDIR'] = tempfile.gettempdir()
 import base64
 import io
 import warnings
