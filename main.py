@@ -347,20 +347,26 @@ def main(page: ft.Page):
     '''我們需要使用 LayoutControl 的動態寬度 (e.control.width)，或是使用相對比例（0.0 ~ 1.0）來計算座標，讓手指觸控點擊的位置能自動適應任何螢幕寬度與旋轉方向。'''
     
     def on_chart_hover(e):
-        # 取得 Stack 內部的局部 X 座標 (0 ~ 500)
+        # 1. 取得觸控點相對於 Gesture/Stack 的 X 座標
         px = getattr(e.local_position, "x", None) if hasattr(e, "local_position") and e.local_position else getattr(e, "x", None)
         if px is None:
             return
 
-        # 1. 動態取得當前 Stack / Container 渲染的實際寬度（若取不到則退回 IMG_W）
-        container_w = e.control.width if (hasattr(e, "control") and e.control and e.control.width) else IMG_W
+        # 2. 取得觸控容器當前在手機螢幕上的「實際渲染寬度」
+        # (若在某些平台上抓不到寬度，則預設退回 FIG_W_PX)
+        rendered_width = e.control.width if (hasattr(e, "control") and e.control and e.control.width) else FIG_W_PX
 
-        # 2. 根據實際渲染寬度計算邊界
-        x_min_px = container_w * LEFT_MARGIN
-        x_max_px = container_w * RIGHT_MARGIN
+        # 3. 換算成 0.0 ~ 1.0 的歸一化比例
+        x_ratio = px / rendered_width
 
-        # 超出繪圖區邊界則隱藏
-        if px < x_min_px or px > x_max_px:
+        # 4. 將比例轉換為原始 500px 圖表的內部座標 (canvas_x)
+        canvas_x = x_ratio * FIG_W_PX
+
+        x_min_px = FIG_W_PX * LEFT_MARGIN   # 500 * 0.12 = 60
+        x_max_px = FIG_W_PX * RIGHT_MARGIN  # 500 * 0.95 = 475
+
+        # 判斷是否超出繪圖區網格邊界
+        if canvas_x < x_min_px or canvas_x > x_max_px:
             if cursor_line.visible or hover_card.visible:
                 cursor_line.visible = False
                 hover_card.visible = False
@@ -368,12 +374,11 @@ def main(page: ft.Page):
                 hover_card.update()
             return
 
-        # 3. 計算歸一化比例 (0.0 ~ 1.0)
-        norm_x = (px - x_min_px) / (x_max_px - x_min_px)
-        
-        # 4. 對數座標換算 (10^1 到 10^5 A)
+        # 5. 用精確的圖表內部座標計算 10^1 ~ 10^5 A 電流
+        norm_x = (canvas_x - x_min_px) / (x_max_px - x_min_px)
         calc_I = 10 ** (1.0 + norm_x * 4.0)
 
+        # 6. 紅色虛線位置同步對齊渲染比例
         cursor_line.left = px
         cursor_line.visible = True
 
@@ -414,7 +419,6 @@ def main(page: ft.Page):
         hover_card.visible = True
         cursor_line.update()
         hover_card.update()
-
 
     def on_chart_exit(e):
         if cursor_line.visible or hover_card.visible:
