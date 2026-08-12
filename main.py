@@ -27,7 +27,7 @@ CURVE_FAMILY_MAP = {
 
 # 繪圖尺寸與邊界參數 (對齊原 Matplotlib 圖表比例)[cite: 2]
 FIG_W_PX, FIG_H_PX = 500, 320
-LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95
+LEFT_MARGIN, RIGHT_MARGIN = 0.12, 0.95 #0.12, 0.95
 TOP_MARGIN, BOTTOM_MARGIN = 0.88, 0.14
 
 # -----------------------------------------------------------------------------
@@ -278,13 +278,6 @@ def main(page: ft.Page):
 
     current_selected_index = [0]
     IMG_W, IMG_H = FIG_W_PX, FIG_H_PX
-
-    #chart_image = ft.Image(src="", fit="fill", width=IMG_W, height=IMG_H)
-    chart_image = ft.Image(src="", fit="fill", width=FIG_W_PX, height=FIG_H_PX)
-    
-    # 建議將圖表容器改為滿版自適應
-    #chart_image = ft.Image(src="", fit="contain", expand=True)
-    
     
     cursor_line = ft.Container(
         content=ft.Column(
@@ -345,28 +338,52 @@ def main(page: ft.Page):
         )
 
     '''我們需要使用 LayoutControl 的動態寬度 (e.control.width)，或是使用相對比例（0.0 ~ 1.0）來計算座標，讓手指觸控點擊的位置能自動適應任何螢幕寬度與旋轉方向。'''
-    
     def on_chart_hover(e):
-        # 1. 取得觸控點相對於 Gesture/Stack 的 X 座標
+        # -------------------------------------------------------------
+        # 1. 精準判斷：僅在「行動裝置 (Android/iOS)」且為「直式顯示」時關閉 Hover
+        # -------------------------------------------------------------
+        if e.page:
+            # 取得當前平台 (例如: "windows", "macos", "linux", "android", "ios", "web")
+            platform = str(e.page.platform).lower() if e.page.platform else ""
+            
+            # 判斷是否為行動裝置 (包含 mobile 平台或觸控系統)
+            is_mobile_platform = "android" in platform or "ios" in platform
+            
+            # 判斷是否為直式顯示 (高度 > 寬度)
+            is_portrait = e.page.height > e.page.width
+            
+            # 只有「明確是行動裝置平台」且「目前為直屏」時才關閉 hover
+            if is_mobile_platform and is_portrait:
+                if cursor_line.visible or hover_card.visible:
+                    cursor_line.visible = False
+                    hover_card.visible = False
+                    cursor_line.update()
+                    hover_card.update()
+                return  # 手機直屏時退出
+        
+        # -------------------------------------------------------------
+        # 2. 電腦端 (Windows/macOS) 或 手機橫屏，繼續執行原有的 Hover 計算
+        # -------------------------------------------------------------
+        
+        # 1. 取得手勢在容器中的實體點擊位置 px
         px = getattr(e.local_position, "x", None) if hasattr(e, "local_position") and e.local_position else getattr(e, "x", None)
         if px is None:
             return
 
-        # 2. 取得觸控容器當前在手機螢幕上的「實際渲染寬度」
-        # (若在某些平台上抓不到寬度，則預設退回 FIG_W_PX)
-        rendered_width = e.control.width if (hasattr(e, "control") and e.control and e.control.width) else FIG_W_PX
+        # 2. 取得當前手勢容器的實際像素寬度 (Dynamic Control Width)
+        # 優先取 control 的寬度，若沒有則用 e.control 的內建尺寸
+        actual_w = getattr(e.control, "width", None) or 453 #FIG_W_PX
+        
 
-        # 3. 換算成 0.0 ~ 1.0 的歸一化比例
-        x_ratio = px / rendered_width
+        # 3. 計算 0.0 ~ 1.0 的百分比位置 (Ratio)
+        ratio_x = px / actual_w
 
-        # 4. 將比例轉換為原始 500px 圖表的內部座標 (canvas_x)
-        canvas_x = x_ratio * FIG_W_PX
+        # 4. 圖表網格黑框的相對邊界 (10A 位於 12%, 100kA 位於 95%)
+        grid_start_ratio = LEFT_MARGIN   # 0.12
+        grid_end_ratio = RIGHT_MARGIN    # 0.95
 
-        x_min_px = FIG_W_PX * LEFT_MARGIN   # 500 * 0.12 = 60
-        x_max_px = FIG_W_PX * RIGHT_MARGIN  # 500 * 0.95 = 475
-
-        # 判斷是否超出繪圖區網格邊界
-        if canvas_x < x_min_px or canvas_x > x_max_px:
+        # 5. 超出黑框邊界 (10A 左側或 100kA 右側) 立刻隱藏！
+        if ratio_x < grid_start_ratio or ratio_x > grid_end_ratio:
             if cursor_line.visible or hover_card.visible:
                 cursor_line.visible = False
                 hover_card.visible = False
@@ -374,11 +391,14 @@ def main(page: ft.Page):
                 hover_card.update()
             return
 
-        # 5. 用精確的圖表內部座標計算 10^1 ~ 10^5 A 電流
-        norm_x = (canvas_x - x_min_px) / (x_max_px - x_min_px)
+        # 6. 計算網格內部的 0.0 ~ 1.0 歸一化比例
+        norm_x = (ratio_x - grid_start_ratio) / (grid_end_ratio - grid_start_ratio)
+        norm_x = max(0.0, min(1.0, norm_x))
+
+        # 7. 對數電流計算 (10^1 到 10^5 A) -> 這樣 475px / 95% 位置就絕對是 100,000 A！
         calc_I = 10 ** (1.0 + norm_x * 4.0)
 
-        # 6. 紅色虛線位置同步對齊渲染比例
+        # 8. 修正紅線位置 (完美鎖定在手勢位置)
         cursor_line.left = px
         cursor_line.visible = True
 
@@ -419,7 +439,7 @@ def main(page: ft.Page):
         hover_card.visible = True
         cursor_line.update()
         hover_card.update()
-
+    
     def on_chart_exit(e):
         if cursor_line.visible or hover_card.visible:
             cursor_line.visible = False
@@ -427,26 +447,27 @@ def main(page: ft.Page):
             cursor_line.update()
             hover_card.update()
 
-    #chart_stack = ft.Stack(
-    #    controls=[chart_image, cursor_line, hover_card],
-    #    width=IMG_W,
-    #    height=IMG_H,
-    #)
-    
+    # 1. Image 必須設置為 ft.ImageFit.FILL (填滿 Container)
+    chart_image = ft.Image(
+        src="",
+        fit="fill", 
+        width=FIG_W_PX,
+        height=FIG_H_PX,
+    )
+
+    # 2. Stack 與 GestureDetector 的寬高必須與 FIG_W_PX 完全一致
     chart_stack = ft.Stack(
         controls=[chart_image, cursor_line, hover_card],
         width=FIG_W_PX,
         height=FIG_H_PX,
     )
-    
-    #chart_stack = ft.Stack(
-    #    controls=[chart_image, cursor_line, hover_card],
-    #    expand=True,
-    #)
-    
-    
-    
-    
+
+    # 3. 外層 GestureDetector 包裹 Stack
+    chart_gesture = ft.GestureDetector(
+        content=chart_stack,
+        on_hover=on_chart_hover,
+        on_pan_update=on_chart_hover,
+    )
     
 
     def handle_touch_gesture(e):
@@ -464,16 +485,19 @@ def main(page: ft.Page):
         e.local_position = type('Pos', (), {'x': px})()
         on_chart_hover(e)
 
+    chart_gesture = ft.GestureDetector(
+        content=chart_stack,
+        on_hover=on_chart_hover,
+        on_tap_down=handle_touch_gesture,
+        on_pan_update=handle_touch_gesture,
+        on_exit=on_chart_exit,
+    )
+
     chart_container = ft.Container(
-        content=ft.GestureDetector(
-            content=chart_stack,
-            on_hover=on_chart_hover,
-            on_tap_down=handle_touch_gesture,
-            on_pan_update=handle_touch_gesture,
-            on_exit=on_chart_exit,
-        ),
+        content=chart_gesture,
         alignment=ft.Alignment(0, 0),
     )
+
 
     INPUT_HEIGHT = 48
     CHK_SLOT_WIDTH = 30
