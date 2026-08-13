@@ -262,7 +262,7 @@ def main(page: ft.Page):
     page.spacing = 6
 
     page.window.width = 480
-    page.window.height = 840
+    page.window.height = 750  #840
     page.window.resizable = True
 
     default_colors = ["#E63946", "#F4A261", "#2A9D8F", "#457B9D", "#1D3557", "#8D99AE"]
@@ -351,8 +351,6 @@ def main(page: ft.Page):
             
             # 判斷是否為直式顯示 (高度 > 寬度)
             is_portrait = e.page.height > e.page.width
-            #print("e.page.height",e.page.height)
-            #print("e.page.width",e.page.width)
             
             # 只有「明確是行動裝置平台」且「目前為直屏」時才關閉 hover
             if is_mobile_platform and is_portrait:
@@ -375,7 +373,10 @@ def main(page: ft.Page):
         # 2. 取得當前手勢容器的實際像素寬度 (Dynamic Control Width)
         # 優先取 control 的寬度，若沒有則用 e.control 的內建尺寸
         #actual_w = getattr(e.control, "width", None) or 453 #FIG_W_PX
-        actual_w = e.page.width*0.97
+        if is_mobile_platform:
+            actual_w = e.page.width*0.90
+        else:
+            actual_w = e.page.width*0.972
 
         # 3. 計算 0.0 ~ 1.0 的百分比位置 (Ratio)
         ratio_x = px / actual_w
@@ -464,14 +465,15 @@ def main(page: ft.Page):
         height=FIG_H_PX,
     )
 
-    # 3. 外層 GestureDetector 包裹 Stack
+    # 3. 外層 GestureDetector 包裹 Stack 
+    # 電腦操作觸發
     chart_gesture = ft.GestureDetector(
         content=chart_stack,
         on_hover=on_chart_hover,
         on_pan_update=on_chart_hover,
     )
     
-
+    # 觸控螢幕上點擊或滑動觸發
     def handle_touch_gesture(e):
         px = None
         if hasattr(e, "local_position") and e.local_position:
@@ -494,6 +496,7 @@ def main(page: ft.Page):
         on_pan_update=handle_touch_gesture,
         on_exit=on_chart_exit,
     )
+
 
     chart_container = ft.Container(
         content=chart_gesture,
