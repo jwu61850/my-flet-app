@@ -262,7 +262,7 @@ def main(page: ft.Page):
     page.spacing = 6
 
     page.window.width = 480
-    page.window.height = 750  #840
+    page.window.height = 840
     page.window.resizable = True
 
     default_colors = ["#E63946", "#F4A261", "#2A9D8F", "#457B9D", "#1D3557", "#8D99AE"]
@@ -339,32 +339,6 @@ def main(page: ft.Page):
 
     '''我們需要使用 LayoutControl 的動態寬度 (e.control.width)，或是使用相對比例（0.0 ~ 1.0）來計算座標，讓手指觸控點擊的位置能自動適應任何螢幕寬度與旋轉方向。'''
     def on_chart_hover(e):
-        # -------------------------------------------------------------
-        # 1. 精準判斷：僅在「行動裝置 (Android/iOS)」且為「直式顯示」時關閉 Hover
-        # -------------------------------------------------------------
-        if e.page:
-            # 取得當前平台 (例如: "windows", "macos", "linux", "android", "ios", "web")
-            platform = str(e.page.platform).lower() if e.page.platform else ""
-            
-            # 判斷是否為行動裝置 (包含 mobile 平台或觸控系統)
-            is_mobile_platform = "android" in platform or "ios" in platform
-            
-            # 判斷是否為直式顯示 (高度 > 寬度)
-            is_portrait = e.page.height > e.page.width
-            
-            # 只有「明確是行動裝置平台」且「目前為直屏」時才關閉 hover
-            if is_mobile_platform and is_portrait:
-                if cursor_line.visible or hover_card.visible:
-                    cursor_line.visible = False
-                    hover_card.visible = False
-                    cursor_line.update()
-                    hover_card.update()
-                return  # 手機直屏時退出
-        
-        # -------------------------------------------------------------
-        # 2. 電腦端 (Windows/macOS) 或 手機橫屏，繼續執行原有的 Hover 計算
-        # -------------------------------------------------------------
-        
         # 1. 取得手勢在容器中的實體點擊位置 px
         px = getattr(e.local_position, "x", None) if hasattr(e, "local_position") and e.local_position else getattr(e, "x", None)
         if px is None:
@@ -372,11 +346,8 @@ def main(page: ft.Page):
 
         # 2. 取得當前手勢容器的實際像素寬度 (Dynamic Control Width)
         # 優先取 control 的寬度，若沒有則用 e.control 的內建尺寸
-        #actual_w = getattr(e.control, "width", None) or 453 #FIG_W_PX
-        if is_mobile_platform:
-            actual_w = e.page.width*0.90
-        else:
-            actual_w = e.page.width*0.972
+        actual_w = getattr(e.control, "width", None) or 453 #FIG_W_PX
+        
 
         # 3. 計算 0.0 ~ 1.0 的百分比位置 (Ratio)
         ratio_x = px / actual_w
@@ -465,15 +436,14 @@ def main(page: ft.Page):
         height=FIG_H_PX,
     )
 
-    # 3. 外層 GestureDetector 包裹 Stack 
-    # 電腦操作觸發
+    # 3. 外層 GestureDetector 包裹 Stack
     chart_gesture = ft.GestureDetector(
         content=chart_stack,
         on_hover=on_chart_hover,
         on_pan_update=on_chart_hover,
     )
     
-    # 觸控螢幕上點擊或滑動觸發
+
     def handle_touch_gesture(e):
         px = None
         if hasattr(e, "local_position") and e.local_position:
@@ -496,7 +466,6 @@ def main(page: ft.Page):
         on_pan_update=handle_touch_gesture,
         on_exit=on_chart_exit,
     )
-
 
     chart_container = ft.Container(
         content=chart_gesture,
@@ -652,15 +621,10 @@ def main(page: ft.Page):
         update_test_current_result()
 
     # 事件綁定
-    #dd_loop_select.on_select = on_loop_selected
-    #dd_voltage.on_select = update_and_redraw
-    #dd_std.on_select = on_std_changed
-    #dd_type.on_select = update_and_redraw
-    dd_loop_select.on_change = on_loop_selected
-    dd_voltage.on_change = update_and_redraw
-    dd_std.on_change = on_std_changed
-    dd_type.on_change = update_and_redraw
-    
+    dd_loop_select.on_select = on_loop_selected
+    dd_voltage.on_select = update_and_redraw
+    dd_std.on_select = on_std_changed
+    dd_type.on_select = update_and_redraw
 
     chk_enable_51.on_change = update_and_redraw
     tf_ip.on_change = update_and_redraw
@@ -717,4 +681,4 @@ def main(page: ft.Page):
     )
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.run(main)
