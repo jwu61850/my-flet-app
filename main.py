@@ -656,6 +656,11 @@ def main(page: ft.Page):
     dd_voltage.on_select = update_and_redraw
     dd_std.on_select = on_std_changed
     dd_type.on_select = update_and_redraw
+    #dd_loop_select.on_change = on_loop_selected
+    #dd_voltage.on_change = update_and_redraw
+    #dd_std.on_change = on_std_changed
+    #dd_type.on_change = update_and_redraw
+    
 
     chk_enable_51.on_change = update_and_redraw
     tf_ip.on_change = update_and_redraw
@@ -712,4 +717,4 @@ def main(page: ft.Page):
     )
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.app(target=main)
