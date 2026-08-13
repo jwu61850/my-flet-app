@@ -374,7 +374,7 @@ def main(page: ft.Page):
         # 優先取 control 的寬度，若沒有則用 e.control 的內建尺寸
         #actual_w = getattr(e.control, "width", None) or 453 #FIG_W_PX
         if is_mobile_platform:
-            actual_w = e.page.width*0.90
+            actual_w = e.page.width*0.88
         else:
             actual_w = e.page.width*0.972
 
