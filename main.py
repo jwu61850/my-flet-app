@@ -652,14 +652,14 @@ def main(page: ft.Page):
         update_test_current_result()
 
     # 事件綁定
-    dd_loop_select.on_select = on_loop_selected
-    dd_voltage.on_select = update_and_redraw
-    dd_std.on_select = on_std_changed
-    dd_type.on_select = update_and_redraw
-    #dd_loop_select.on_change = on_loop_selected
-    #dd_voltage.on_change = update_and_redraw
-    #dd_std.on_change = on_std_changed
-    #dd_type.on_change = update_and_redraw
+    #dd_loop_select.on_select = on_loop_selected
+    #dd_voltage.on_select = update_and_redraw
+    #dd_std.on_select = on_std_changed
+    #dd_type.on_select = update_and_redraw
+    dd_loop_select.on_change = on_loop_selected
+    dd_voltage.on_change = update_and_redraw
+    dd_std.on_change = on_std_changed
+    dd_type.on_change = update_and_redraw
     
 
     chk_enable_51.on_change = update_and_redraw
