@@ -503,22 +503,28 @@ def main(page: ft.Page):
         alignment=ft.Alignment(0, 0),
     )
 
-
-    INPUT_HEIGHT = 48
+    # -------
+    # 設定物件型式
+    # -------
+    INPUT_HEIGHT = 36 #48
+    TEXT_HEIGHT=58
     CHK_SLOT_WIDTH = 30
-    style_text_10 = ft.TextStyle(size=12)
-    pad_box = ft.Padding(6, 6, 6, 6)
-
+    TEXT_SIZE=15
+    
+    style_text_10 = ft.TextStyle(size=16)
+    pad_box = ft.Padding(6, 10, 6, 10)    # (Left,Top,Right,Buttom)
+    #這代表：輸入框（TextField）或下拉選單（Dropdown）裡面的文字/標籤，距離外框四周都有 6px 的留白距離
+    
     dd_loop_select = ft.Dropdown(
         label="迴路",
         options=[ft.dropdown.Option(key=str(i), text=cfg["name"]) for i, cfg in enumerate(stage_configs)],
-        value="0", dense=True, text_size=11, label_style=style_text_10,
+        value="0", dense=True, text_size=TEXT_SIZE, label_style=style_text_10,
         content_padding=pad_box, height=INPUT_HEIGHT, expand=True
     )
     dd_voltage = ft.Dropdown(
         label="電壓(kV)",
         options=[ft.dropdown.Option(key=str(val), text=name) for name, val in VOLTAGE_OPTIONS],
-        dense=True, text_size=11, label_style=style_text_10,
+        dense=True, text_size=TEXT_SIZE, label_style=style_text_10,
         content_padding=pad_box, height=INPUT_HEIGHT, expand=True
     )
 
@@ -527,25 +533,32 @@ def main(page: ft.Page):
     dd_std = ft.Dropdown(
         label="標準",
         options=[ft.dropdown.Option("IEC"), ft.dropdown.Option("IEEE"), ft.dropdown.Option("IEEE2")],
-        dense=True, expand=True, text_size=11, label_style=style_text_10,
-        content_padding=pad_box, height=INPUT_HEIGHT
+        dense=True, expand=True, text_size=TEXT_SIZE, label_style=style_text_10,
+        content_padding=pad_box , height=INPUT_HEIGHT
     )
     dd_type = ft.Dropdown(
-        label="型態", options=[], dense=True, expand=True,
-        text_size=11, label_style=style_text_10, content_padding=pad_box, height=INPUT_HEIGHT
+        label="型態", options=[], 
+        dense=True, expand=True, text_size=TEXT_SIZE, label_style=style_text_10, 
+        content_padding=pad_box , height=INPUT_HEIGHT
     )
     
-    tf_ip = ft.TextField(label="51 Ip (A)", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
-    tf_tms = ft.TextField(label="TMS/TD", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
+    tf_ip = ft.TextField(label="51 Ip (A)", dense=True, expand=True, text_size=TEXT_SIZE, 
+                         label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, 
+                         content_padding=pad_box , height=TEXT_HEIGHT
+                         )
+    tf_tms = ft.TextField(label="TMS/TD", dense=True, expand=True, text_size=TEXT_SIZE, 
+                          label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, 
+                          content_padding=pad_box , height=TEXT_HEIGHT
+                          )
 
     chk_enable_50 = ft.Checkbox(value=False)
-    tf_inst_ip = ft.TextField(label="50 Ip (A)", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
-    tf_inst_time = ft.TextField(label="時間 (s)", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
+    tf_inst_ip = ft.TextField(label="50 Ip (A)", dense=True, expand=True, text_size=TEXT_SIZE, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=TEXT_HEIGHT)
+    tf_inst_time = ft.TextField(label="時間 (s)", dense=True, expand=True, text_size=TEXT_SIZE, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=TEXT_HEIGHT)
 
-    tf_test_I = ft.TextField(label="電流(A)", dense=True, expand=True, text_size=11, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=INPUT_HEIGHT)
+    tf_test_I = ft.TextField(label="電流(A)", dense=True, expand=True, text_size=TEXT_SIZE, label_style=style_text_10, keyboard_type=ft.KeyboardType.NUMBER, content_padding=pad_box, height=TEXT_HEIGHT)
     tf_test_result = ft.TextField(
         label="跳脫時間 (s)", value="-", read_only=True, dense=True, expand=True,
-        text_size=11, label_style=style_text_10, content_padding=pad_box, height=INPUT_HEIGHT,
+        text_size=TEXT_SIZE, label_style=style_text_10, content_padding=pad_box, height=TEXT_HEIGHT,
         text_style=ft.TextStyle(color="#E63946", weight=ft.FontWeight.BOLD)
     )
 
@@ -674,7 +687,10 @@ def main(page: ft.Page):
 
     # 初始載入 IED_1
     load_loop_data_to_ui(0)
-
+    
+    # -------
+    # 將設定物件型式加入Container內並顯示
+    # -------
     top_panel = ft.Container(
         content=chart_container,
         alignment=ft.Alignment(0, 0),
@@ -685,17 +701,28 @@ def main(page: ft.Page):
         content=ft.Column(
             controls=[
                 ft.Text("⚡ 保護參數設定", size=12, weight=ft.FontWeight.BOLD),
-                ft.Row([ft.Container(width=CHK_SLOT_WIDTH), dd_loop_select, dd_voltage], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                ft.Divider(height=1),
-                ft.Row([ft.Container(width=CHK_SLOT_WIDTH, content=chk_enable_51, alignment=ft.Alignment(0, 0)), dd_std, dd_type], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                ft.Row([ft.Container(width=CHK_SLOT_WIDTH), tf_ip, tf_tms], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                ft.Divider(height=1),
-                ft.Row([ft.Container(width=CHK_SLOT_WIDTH, content=chk_enable_50, alignment=ft.Alignment(0, 0)), tf_inst_ip, tf_inst_time], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
-                ft.Divider(height=1),
-                ft.Text("🎯 電流測試試算", size=11, weight=ft.FontWeight.BOLD, color="#1D3557"),
-                ft.Row([ft.Container(width=CHK_SLOT_WIDTH), tf_test_I, tf_test_result], spacing=4, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row([ft.Container(width=CHK_SLOT_WIDTH), dd_loop_select, dd_voltage], 
+                       spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Divider(height=1, thickness=1, color="#E0E0E0"),
+                ft.Row([ft.Container(width=CHK_SLOT_WIDTH, content=chk_enable_51, 
+                       alignment=ft.Alignment(0, 0)), dd_std, dd_type], 
+                       spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row([ft.Container(width=CHK_SLOT_WIDTH), tf_ip, tf_tms], 
+                       spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                       height=40),
+                ft.Divider(height=1, thickness=1, color="#E0E0E0"),
+                ft.Row([ft.Container(width=CHK_SLOT_WIDTH, content=chk_enable_50, 
+                        alignment=ft.Alignment(0, 0)), tf_inst_ip, tf_inst_time], 
+                       spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                       height=40),
+                ft.Divider(height=1, thickness=1, color="#E0E0E0"),
+                ft.Text("🎯 電流測試試算", size=11, weight=ft.FontWeight.BOLD, 
+                        color="#1D3557"),
+                ft.Row([ft.Container(width=CHK_SLOT_WIDTH), tf_test_I, tf_test_result], 
+                       spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                       height=40),
             ],
-            spacing=4,
+            spacing=8,  # 設定每一組 row與divider的間距
         ),
         padding=8,
         border=ft.Border.all(1, "#DDDDDD"),
